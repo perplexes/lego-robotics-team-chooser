@@ -18,7 +18,8 @@ def setup_model_variables(model: cp_model.CpModel, team_data: TeamData, total_te
     return student_team, student_role
 
 def add_basic_constraints(model: cp_model.CpModel, team_data: TeamData, 
-                         student_team: dict, student_role: dict, total_teams: int):
+                         student_team: dict, student_role: dict, total_teams: int,
+                         eighth_grade_mode: str = 'separate'):
     """Add basic assignment constraints to the model."""
     # Each student must be in exactly one team
     for i in range(team_data.num_students):
@@ -29,45 +30,51 @@ def add_basic_constraints(model: cp_model.CpModel, team_data: TeamData,
     for i in team_data.female_indices:
         model.Add(student_team[i, 0] == 1)
     
-    # Put all 8th graders in team 1
-    for i in team_data.eighth_grade_indices:
-        model.Add(student_team[i, 1] == 1)
-    
-    # Ensure non-special students cannot be in teams 0 and 1
-    for i in range(team_data.num_students):
-        if i not in team_data.female_indices and i not in team_data.eighth_grade_indices:
-            model.Add(student_team[i, 0] == 0)
-            model.Add(student_team[i, 1] == 0)
+    if eighth_grade_mode == 'separate':
+        # Put all 8th graders in team 1
+        for i in team_data.eighth_grade_indices:
+            model.Add(student_team[i, 1] == 1)
+        
+        # Ensure non-special students cannot be in teams 0 and 1
+        for i in range(team_data.num_students):
+            if i not in team_data.female_indices and i not in team_data.eighth_grade_indices:
+                model.Add(student_team[i, 0] == 0)
+                model.Add(student_team[i, 1] == 0)
+    else:  # distributed mode
+        # Only ensure non-females cannot be in team 0
+        for i in range(team_data.num_students):
+            if i not in team_data.female_indices:
+                model.Add(student_team[i, 0] == 0)
             
 def add_team_size_constraints(model: cp_model.CpModel, team_data: TeamData, 
-                            student_team: dict, total_teams: int):
+                            student_team: dict, total_teams: int,
+                            eighth_grade_mode: str = 'separate'):
     """Add constraints for team sizes."""
-    # For special teams (0 and 1), enforce exact size
-    for t in range(2):
-        team_size = sum(student_team[i, t] for i in range(team_data.num_students))
-        model.Add(team_size == team_data.config.special_team_size)
+    # For female team (team 0), enforce exact size
+    team_size = sum(student_team[i, 0] for i in range(team_data.num_students))
+    model.Add(team_size == team_data.config.special_team_size)
     
-    # For other teams, either have 0 students or meet min/max size constraints
-    for t in range(2, total_teams):
+    if eighth_grade_mode == 'separate':
+        # For 8th grade team (team 1), enforce exact size
+        team_size = sum(student_team[i, 1] for i in range(team_data.num_students))
+        model.Add(team_size == team_data.config.special_team_size)
+        start_team = 2
+    else:
+        start_team = 1
+    
+    # For regular teams, enforce min/max size
+    for t in range(start_team, total_teams):
         team_size = sum(student_team[i, t] for i in range(team_data.num_students))
-        team_exists = model.NewBoolVar(f'team_{t}_exists')
-        
-        # If team exists, it must meet size constraints
-        model.Add(team_size >= team_data.config.min_team_size).OnlyEnforceIf(team_exists)
-        model.Add(team_size <= team_data.config.max_team_size).OnlyEnforceIf(team_exists)
-        
-        # If team doesn't exist, it must be empty
-        model.Add(team_size == 0).OnlyEnforceIf(team_exists.Not())
+        model.Add(team_size >= team_data.config.min_team_size)
+        model.Add(team_size <= team_data.config.max_team_size)
 
 def add_role_constraints(model: cp_model.CpModel, team_data: TeamData, 
                         student_team: dict, student_role: dict, total_teams: int):
     """Add constraints for role assignments."""
-    # Each student must have 1 or 2 roles
+    # Each student can have 0-2 roles
     for i in range(team_data.num_students):
-        model.Add(sum(student_role[i, r] for r in ROLE_COLUMNS) >= 
-                 team_data.config.min_roles_per_student)
-        model.Add(sum(student_role[i, r] for r in ROLE_COLUMNS) <= 
-                 team_data.config.max_roles_per_student)
+        num_roles = sum(student_role[i, r] for r in ROLE_COLUMNS)
+        model.Add(num_roles <= 2)
     
     # Each role must be assigned exactly once per team
     for t in range(total_teams):
@@ -79,15 +86,30 @@ def add_role_constraints(model: cp_model.CpModel, team_data: TeamData,
                 model.AddBoolAnd([student_team[i, t], student_role[i, r]]).OnlyEnforceIf(student_role_team)
                 model.AddBoolOr([student_team[i, t].Not(), student_role[i, r].Not()]).OnlyEnforceIf(student_role_team.Not())
                 role_in_team.append(student_role_team)
+            
+            # Each role must be assigned exactly once per team
             model.Add(sum(role_in_team) == 1)
 
 def add_grade_constraints(model: cp_model.CpModel, team_data: TeamData, 
-                         student_team: dict, total_teams: int):
+                         student_team: dict, total_teams: int,
+                         eighth_grade_mode: str = 'separate'):
     """Add constraints for grade grouping."""
     # Grade grouping constraint: if a grade appears in a team, there must be at least 2 students of that grade
     # (except for the special teams 0 and 1 which have their own constraints)
-    for t in range(2, total_teams):  # Only for non-special teams
-        for grade in ['6th', '7th', '8th']:
+    start_team = 2 if eighth_grade_mode == 'separate' else 1
+    
+    # In distributed mode, ensure at most one 8th grader per team (except team 0)
+    if eighth_grade_mode == 'distributed':
+        for t in range(1, total_teams):
+            eighth_graders_in_team = []
+            for i in team_data.eighth_grade_indices:
+                eighth_graders_in_team.append(student_team[i, t])
+            if eighth_graders_in_team:
+                model.Add(sum(eighth_graders_in_team) <= 1)
+    
+    # Grade grouping for 6th and 7th grades
+    for t in range(start_team, total_teams):  # Only for non-special teams
+        for grade in ['6th', '7th']:  # Only handle 6th and 7th grades here
             # Count students of this grade in this team
             grade_members = []
             for i in range(team_data.num_students):
@@ -98,9 +120,7 @@ def add_grade_constraints(model: cp_model.CpModel, team_data: TeamData,
                 # Either no students of this grade, or at least 2
                 grade_present = model.NewBoolVar(f'grade_{grade}_team_{t}')
                 
-                # grade_present is true if any student of this grade is in the team
-                model.Add(sum(grade_members) >= 1).OnlyEnforceIf(grade_present)
-                model.Add(sum(grade_members) == 0).OnlyEnforceIf(grade_present.Not())
-                
                 # If grade is present, must have at least 2 students
                 model.Add(sum(grade_members) >= 2).OnlyEnforceIf(grade_present)
+                # If grade not present, must have 0 students
+                model.Add(sum(grade_members) == 0).OnlyEnforceIf(grade_present.Not())

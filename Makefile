@@ -32,4 +32,10 @@ lint:
 run:
 	$(BIN)/python team_optimizer.py $(ARGS)
 
+run-all:
+	$(BIN)/python run_combinations.py
+
+clean-outputs:
+	rm -f teams_*.csv
+
 .DEFAULT_GOAL := setup

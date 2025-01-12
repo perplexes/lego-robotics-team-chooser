@@ -16,9 +16,7 @@ class OptimizationConfig:
     min_team_size: int = 4
     max_team_size: int = 8
     special_team_size: int = 4
-    min_roles_per_student: int = 1
-    max_roles_per_student: int = 2
-    sixth_grade_multi_role_penalty: int = -5
+    sixth_grade_multi_role_penalty: int = -80  # Higher penalty for 6th graders with multiple roles
 
 @dataclass
 class TeamData:

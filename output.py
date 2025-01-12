@@ -3,7 +3,8 @@ from ortools.sat.python import cp_model
 from models import TeamData, OptimizationResult
 
 def extract_solution(solver: cp_model.CpSolver, team_data: TeamData,
-                    student_team: dict, student_role: dict, total_teams: int) -> OptimizationResult:
+                    student_team: dict, student_role: dict, total_teams: int,
+                    output_file: str = 'team_assignments.csv') -> OptimizationResult:
     """Extract the solution from the solver and format it for output."""
     results = []
     csv_results = []
@@ -39,7 +40,7 @@ def extract_solution(solver: cp_model.CpSolver, team_data: TeamData,
     csv_df = pd.DataFrame(csv_results)
     
     # Save CSV output
-    csv_df.to_csv('team_assignments.csv', index=False)
+    csv_df.to_csv(output_file, index=False)
     
     # Return OptimizationResult
     return OptimizationResult(
@@ -59,7 +60,7 @@ def get_solver_status(status_name: str) -> str:
     }
     return status_map.get(status_name, status_name)
 
-def print_solution(result: OptimizationResult | None) -> None:
+def print_solution(result: OptimizationResult | None, output_file: str = 'team_assignments.csv') -> None:
     """Print the optimization results in a readable format."""
     if result is None:
         print("\nNo solution found. The constraints may be too restrictive.")
@@ -69,7 +70,7 @@ def print_solution(result: OptimizationResult | None) -> None:
     if result.student_assignments is not None:
         print("\nOptimal team assignments found:")
         print(result.student_assignments)
-        print("\nCSV output saved to team_assignments.csv")
+        print(f"\nCSV output saved to {output_file}")
         
         # Print team sizes
         print("\nTeam sizes:")
