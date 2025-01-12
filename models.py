@@ -24,7 +24,6 @@ class OptimizationConfig:
 class TeamData:
     data: pd.DataFrame
     num_students: int
-    num_teams: int
     female_indices: List[int]
     eighth_grade_indices: List[int]
     config: OptimizationConfig

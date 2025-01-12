@@ -44,11 +44,12 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
         self._student_role = None
         self._team_data = None
     
-    def set_parameters(self, student_team: dict, student_role: dict, team_data: TeamData):
+    def set_parameters(self, student_team: dict, student_role: dict, team_data: TeamData, total_teams: int):
         """Set the parameters needed for solution printing."""
         self._student_team = student_team
         self._student_role = student_role
         self._team_data = team_data
+        self._total_teams = total_teams
     
     def on_solution_callback(self):
         """Called for each intermediate solution found."""
@@ -69,7 +70,7 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
                 'name': f'Student {self._team_data.data.iloc[i]["ID"]}',
                 'gender': self._team_data.data.iloc[i]['Gender'],
                 'grade': self._team_data.data.iloc[i]['Grade'],
-                'team': next(t for t in range(self._team_data.num_teams) 
+                'team': next(t for t in range(self._total_teams) 
                            if self.Value(self._student_team[i, t]) == 1),
                 'roles': [r for r in self._team_data.role_columns 
                          if self.Value(self._student_role[i, r]) == 1]
@@ -79,7 +80,7 @@ class SolutionPrinter(cp_model.CpSolverSolutionCallback):
         # Print team compositions
         import pandas as pd
         df = pd.DataFrame(results)
-        for t in range(self._team_data.num_teams):
+        for t in range(self._total_teams):
             team_df = df[df['team'] == t]
             print(f"\nTeam {t} ({len(team_df)} students):")
             for _, student in team_df.iterrows():

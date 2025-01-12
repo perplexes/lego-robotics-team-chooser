@@ -34,13 +34,13 @@ class TeamAssignmentOptimizer:
         model = cp_model.CpModel()
         
         # Set up variables
-        student_team, student_role = setup_model_variables(model, self.team_data)
+        student_team, student_role = setup_model_variables(model, self.team_data, self.total_teams_constraint)
         
         # Add constraints
         add_basic_constraints(model, self.team_data, student_team, student_role, self.total_teams_constraint)
-        add_team_size_constraints(model, self.team_data, student_team)
-        add_role_constraints(model, self.team_data, student_team, student_role)
-        add_grade_constraints(model, self.team_data, student_team)
+        add_team_size_constraints(model, self.team_data, student_team, self.total_teams_constraint)
+        # add_role_constraints(model, self.team_data, student_team, student_role, self.total_teams_constraint)
+        add_grade_constraints(model, self.team_data, student_team, self.total_teams_constraint)
         
         # Set up objective function
         setup_objective_function(model, self.team_data, student_team, student_role)
@@ -48,7 +48,7 @@ class TeamAssignmentOptimizer:
         # Create solver and solution printer
         solver = cp_model.CpSolver()
         solution_printer = SolutionPrinter()
-        solution_printer.set_parameters(student_team, student_role, self.team_data)
+        solution_printer.set_parameters(student_team, student_role, self.team_data, self.total_teams_constraint)
         
         # Solve with time limit
         print("\nSolving...")
@@ -58,7 +58,7 @@ class TeamAssignmentOptimizer:
         
         # Extract and return results if solution found
         if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-            return extract_solution(solver, self.team_data, student_team, student_role)
+            return extract_solution(solver, self.team_data, student_team, student_role, self.total_teams_constraint)
         
         # Print detailed error for infeasible cases
         if status == cp_model.INFEASIBLE:
