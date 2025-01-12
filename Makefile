@@ -30,6 +30,6 @@ lint:
 	$(BIN)/flake8 .
 
 run:
-	$(BIN)/python team_optimizer.py
+	$(BIN)/python team_optimizer.py $(ARGS)
 
 .DEFAULT_GOAL := setup
